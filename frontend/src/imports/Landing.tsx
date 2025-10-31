@@ -1,15 +1,20 @@
-import imgImage1 from "../assets/bff169ea0cfa182730a6e6fb24d12037eb929f20.png";
-import maskGroup from "../assets/Mask group.png";
+import React from "react";
+const imgImage1: string = new URL("../assets/bff169ea0cfa182730a6e6fb24d12037eb929f20.png", import.meta.url).href;
+const maskGroup: string = new URL("../assets/Mask group.png", import.meta.url).href;
 import Aurora from "../components/Aurora/Aurora";
+const baseIcon: string = new URL("../assets/base.png", import.meta.url).href;
 
-// import Aurora from "../components/Aurora/Aurora";
 
 function Frame2147225774() {
   return (
-    <div className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0">
+    <button
+      type="button"
+      onClick={() => (window.location.href = "/verify")}
+      className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0"
+    >
       <div aria-hidden="true" className="absolute border border-[#dfdfdf] border-solid inset-0 pointer-events-none rounded-[8px]" />
-      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/ verify</p>
-    </div>
+      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/verify</p>
+    </button>
   );
 }
 
@@ -35,10 +40,14 @@ function Frame2() {
 
 function Frame2147225778() {
   return (
-    <div className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0">
+    <button
+      type="button"
+      onClick={() => (window.location.href = "/settle")}
+      className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0"
+    >
       <div aria-hidden="true" className="absolute border border-[#dfdfdf] border-solid inset-0 pointer-events-none rounded-[8px]" />
-      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/ settle</p>
-    </div>
+      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/settle</p>
+    </button>
   );
 }
 
@@ -64,10 +73,14 @@ function Frame2085661066() {
 
 function Frame2147225780() {
   return (
-    <div className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0">
+    <button
+      type="button"
+      onClick={() => (window.location.href = "/supported")}
+      className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0"
+    >
       <div aria-hidden="true" className="absolute border border-[#dfdfdf] border-solid inset-0 pointer-events-none rounded-[8px]" />
-      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/ supported</p>
-    </div>
+      <p className="font-['JetBrains_Mono:Medium',sans-serif] font-medium leading-[1.2] relative shrink-0 text-[#101114] text-[16px] text-nowrap whitespace-pre">/supported</p>
+    </button>
   );
 }
 
@@ -106,7 +119,7 @@ function Frame2147225782() {
   return (
     <div className="box-border content-stretch flex gap-[10px] items-center justify-center p-[6px] relative rounded-[8px] shrink-0">
       <div aria-hidden="true" className="absolute border border-[#dfdfdf] border-solid inset-0 pointer-events-none rounded-[8px]" />
-      <div className="bg-[blue] shrink-0 size-[25px]" />
+      <img src={baseIcon} alt="Base" className="shrink-0" style={{ width: 25, height: 25, borderRadius: 4 }} />
       <p className="font-['JetBrains_Mono:Bold',sans-serif] font-bold leading-[1.2] relative shrink-0 text-[#101114] text-[24px] text-nowrap whitespace-pre">BASE</p>
     </div>
   );
@@ -153,7 +166,7 @@ function FeatureBlock() {
 
 
 
-export default function MacBookAir1() {
+export default function Landing() {
   return (
     <div className="macbook-air-bg">
       <Aurora
@@ -172,3 +185,5 @@ export default function MacBookAir1() {
     </div>
   );
 }
+
+

@@ -1,5 +1,6 @@
-import MacBookAir1 from "./imports/MacBookAir1";
+import React from "react";
+import Landing from "./imports/Landing";
 
 export default function App() {
-  return <MacBookAir1 />;
+  return <Landing />;
 }
