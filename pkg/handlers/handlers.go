@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -21,8 +22,14 @@ func NewHandler(fac facilitator.Facilitator) *Handler {
 	}
 }
 
-// VerifyHandler handles POST /verify requests
+// VerifyHandler handles /verify requests
 func (h *Handler) VerifyHandler(w http.ResponseWriter, r *http.Request) {
+	// GET returns endpoint information
+	if r.Method == http.MethodGet {
+		h.getVerifyInfo(w, r)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -33,6 +40,12 @@ func (h *Handler) VerifyHandler(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
+		// Check if error is due to request size limit
+		if errors.Is(err, errors.New("http: request body too large")) ||
+		   (err.Error() == "http: request body too large") {
+			respondError(w, http.StatusRequestEntityTooLarge, "request body exceeds maximum allowed size (1MB)")
+			return
+		}
 		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request: %v", err))
 		return
 	}
@@ -52,8 +65,14 @@ func (h *Handler) VerifyHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, resp)
 }
 
-// SettleHandler handles POST /settle requests
+// SettleHandler handles /settle requests
 func (h *Handler) SettleHandler(w http.ResponseWriter, r *http.Request) {
+	// GET returns endpoint information
+	if r.Method == http.MethodGet {
+		h.getSettleInfo(w, r)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -62,6 +81,12 @@ func (h *Handler) SettleHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse request
 	var req types.SettleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Check if error is due to request size limit
+		if errors.Is(err, errors.New("http: request body too large")) ||
+		   (err.Error() == "http: request body too large") {
+			respondError(w, http.StatusRequestEntityTooLarge, "request body exceeds maximum allowed size (1MB)")
+			return
+		}
 		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid request: %v", err))
 		return
 	}
@@ -103,6 +128,30 @@ func (h *Handler) SupportedHandler(w http.ResponseWriter, r *http.Request) {
 // HealthHandler handles GET /health requests
 func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// getVerifyInfo returns machine-readable description of the /verify endpoint
+func (h *Handler) getVerifyInfo(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"endpoint":    "/verify",
+		"description": "POST to verify x402 payments",
+		"body": map[string]string{
+			"paymentPayload":      "PaymentPayload",
+			"paymentRequirements": "PaymentRequirements",
+		},
+	})
+}
+
+// getSettleInfo returns machine-readable description of the /settle endpoint
+func (h *Handler) getSettleInfo(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"endpoint":    "/settle",
+		"description": "POST to settle x402 payments",
+		"body": map[string]string{
+			"paymentPayload":      "PaymentPayload",
+			"paymentRequirements": "PaymentRequirements",
+		},
+	})
 }
 
 // Helper functions
