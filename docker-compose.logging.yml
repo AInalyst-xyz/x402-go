@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # x402 facilitator
+  facilitator:
+    build: .
+    container_name: x402-facilitator
+    env_file: .env
+    ports:
+      - "8080:8080"
+    networks:
+      - x402-net
+    restart: unless-stopped
+
+  # mitmproxy for HTTP traffic inspection
+  mitmproxy:
+    image: mitmproxy/mitmproxy:latest
+    container_name: x402-mitmproxy
+    command: >
+      mitmweb
+      --web-host 0.0.0.0
+      --mode reverse:http://facilitator:8080
+      --set stream_large_bodies=1m
+      --set flow_detail=3
+    ports:
+      - "8081:8081"  # Proxy port
+      - "8082:8082"  # Web interface
+    volumes:
+      - ./logs/mitmproxy:/home/mitmproxy/.mitmproxy
+    networks:
+      - x402-net
+    depends_on:
+      - facilitator
+
+  # Caddy as logging reverse proxy (alternative)
+  caddy:
+    image: caddy:2-alpine
+    container_name: x402-caddy
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./logs/caddy:/var/log/caddy
+    networks:
+      - x402-net
+    depends_on:
+      - facilitator
+    command: caddy run --config /etc/caddy/Caddyfile
+
+  # Vector for log aggregation (optional)
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: x402-vector
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml:ro
+      - ./logs:/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - x402-net
+    depends_on:
+      - facilitator
+
+networks:
+  x402-net:
+    driver: bridge
