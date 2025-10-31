@@ -72,8 +72,11 @@ func main() {
 		loggedHandler = middleware.LoggingMiddleware(mux)
 	}
 
+	// Add request size limit middleware (1MB limit)
+	sizeLimitedHandler := requestSizeLimitMiddleware(loggedHandler, 1<<20) // 1MB
+
 	// Add CORS middleware
-	corsHandler := corsMiddleware(loggedHandler)
+	corsHandler := corsMiddleware(sizeLimitedHandler)
 
 	// Create server
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
@@ -111,12 +114,35 @@ func main() {
 	log.Println("Server exited")
 }
 
+// requestSizeLimitMiddleware limits the maximum size of request bodies to prevent DoS attacks
+func requestSizeLimitMiddleware(next http.Handler, maxBytes int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Limit the request body size
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // corsMiddleware adds CORS headers to responses
+// Uses reflective CORS pattern for public API - allows any origin but without credentials
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+
+		if origin != "" {
+			// Reflect the origin back (allows any origin for browser requests)
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		} else {
+			// For non-CORS requests (same-origin, curl, postman, etc.)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Payment-Payload")
+
+		// IMPORTANT: Do NOT set Access-Control-Allow-Credentials
+		// This is a public API and should never use credentials
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
