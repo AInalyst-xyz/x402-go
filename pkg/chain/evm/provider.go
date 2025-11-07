@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	x402types "github.com/x402-rs/x402-go/pkg/types"
 )
@@ -33,14 +36,20 @@ type Provider struct {
 	usdcABI         abi.ABI
 	validatorABI    abi.ABI
 	network         x402types.Network
+	nonceStore      *NonceStore // Tracks used ERC-3009 nonces to prevent replay
 }
 
 // NewProvider creates a new EVM provider
 func NewProvider(rpcURL string, chainID *big.Int, network x402types.Network, privateKeys []string) (*Provider, error) {
-	client, err := ethclient.Dial(rpcURL)
+	// Create RPC client with timeout
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second, // Prevent indefinite hangs on RPC calls
+	}
+	rpcClient, err := rpc.DialHTTPWithClient(rpcURL, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RPC: %w", err)
 	}
+	client := ethclient.NewClient(rpcClient)
 
 	// Parse private keys
 	var signers []*ecdsa.PrivateKey
@@ -81,6 +90,7 @@ func NewProvider(rpcURL string, chainID *big.Int, network x402types.Network, pri
 		usdcABI:         usdcABI,
 		validatorABI:    validatorABI,
 		network:         network,
+		nonceStore:      NewNonceStore(),
 	}, nil
 }
 
@@ -105,6 +115,26 @@ func (p *Provider) Verify(ctx context.Context, request *x402types.VerifyRequest)
 		}, nil
 	}
 
+	// Validate asset is whitelisted USDC (mainnet only)
+	// Whitelist of accepted USDC mainnet addresses (case-insensitive)
+	whitelistedAssets := map[string]bool{
+		"0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": true, // USDC on Base mainnet
+		// Add more mainnet USDC addresses here as needed (use lowercase):
+		// "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": true, // USDC on Ethereum mainnet
+		// "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": true, // USDC on Polygon mainnet
+		// "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": true, // USDC on Avalanche mainnet
+	}
+
+	assetAddr := strings.ToLower(requirements.Asset.Hex())
+	if !whitelistedAssets[assetAddr] {
+		payer := x402types.NewEvmAddress(auth.From)
+		return &x402types.VerifyResponse{
+			IsValid: false,
+			Reason:  fmt.Sprintf("unsupported asset: %s (only whitelisted USDC contracts are accepted)", requirements.Asset.Hex()),
+			Payer:   &payer,
+		}, nil
+	}
+
 	// Validate timing
 	now := x402types.UnixTimestamp()
 	validAfter, err := strconv.ParseUint(auth.ValidAfter, 10, 64)
@@ -115,6 +145,17 @@ func (p *Provider) Verify(ctx context.Context, request *x402types.VerifyRequest)
 	if err != nil {
 		return nil, fmt.Errorf("invalid validBefore: %w", err)
 	}
+
+	// Validate validBefore > validAfter (prevents integer underflow)
+	if validBefore <= validAfter {
+		payer := x402types.NewEvmAddress(auth.From)
+		return &x402types.VerifyResponse{
+			IsValid: false,
+			Reason:  fmt.Sprintf("invalid validity window: validBefore (%d) must be greater than validAfter (%d)", validBefore, validAfter),
+			Payer:   &payer,
+		}, nil
+	}
+
 	if now < validAfter {
 		payer := x402types.NewEvmAddress(auth.From)
 		err := x402types.NewInvalidTimingError(payer, fmt.Sprintf("payment not yet valid (validAfter: %s, now: %d)", auth.ValidAfter, now))
@@ -130,6 +171,31 @@ func (p *Provider) Verify(ctx context.Context, request *x402types.VerifyRequest)
 		return &x402types.VerifyResponse{
 			IsValid: false,
 			Reason:  err.Message,
+			Payer:   &payer,
+		}, nil
+	}
+
+	// Validate timeout window doesn't exceed MaxTimeoutSeconds
+	if requirements.MaxTimeoutSeconds > 0 {
+		timeoutWindow := validBefore - validAfter
+		maxTimeout := uint64(requirements.MaxTimeoutSeconds)
+		if timeoutWindow > maxTimeout {
+			payer := x402types.NewEvmAddress(auth.From)
+			return &x402types.VerifyResponse{
+				IsValid: false,
+				Reason:  fmt.Sprintf("payment validity window too long: %d seconds (max allowed: %d seconds)", timeoutWindow, maxTimeout),
+				Payer:   &payer,
+			}, nil
+		}
+	}
+
+	// Check for nonce replay
+	fromAddress := auth.From.Hex()
+	if p.nonceStore.IsNonceUsed(fromAddress, auth.Nonce) {
+		payer := x402types.NewEvmAddress(auth.From)
+		return &x402types.VerifyResponse{
+			IsValid: false,
+			Reason:  "nonce already used (replay attack detected)",
 			Payer:   &payer,
 		}, nil
 	}
@@ -331,6 +397,10 @@ func (p *Provider) Settle(ctx context.Context, request *x402types.SettleRequest)
 		}, nil
 	}
 
+	// Mark nonce as used after successful settlement
+	fromAddress := auth.From.Hex()
+	p.nonceStore.MarkNonceUsed(fromAddress, auth.Nonce, validBefore.Int64())
+
 	return &x402types.SettleResponse{
 		Success: true,
 		TransactionHash: &x402types.TransactionHash{
@@ -470,8 +540,9 @@ func (p *Provider) transferWithAuthorization(
 	}
 	auth.Nonce = big.NewInt(int64(nonceVal))
 
-	// Estimate gas
-	auth.GasLimit = 100000 // TODO: proper gas estimation
+	// Set gas limit for transferWithAuthorization
+	// Fixed at 100,000 (typical usage: ~50-70k, provides safe buffer)
+	auth.GasLimit = 100000
 
 	// Get gas price
 	gasPrice, err := p.client.SuggestGasPrice(ctx)

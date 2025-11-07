@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -68,29 +67,16 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Read and log request body
-		var requestBody []byte
-		if r.Body != nil {
-			requestBody, _ = io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
-		}
-
-		// Log request
+		// Log request (metadata only, no body)
 		log.Printf("→ %s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
-		if len(requestBody) > 0 {
-			log.Printf("  Body: %s", formatJSON(requestBody))
-		}
 
 		// Capture response
 		recorder := NewResponseRecorder(w)
 		next.ServeHTTP(recorder, r)
 
-		// Log response
+		// Log response (metadata only, no body)
 		duration := time.Since(start)
 		log.Printf("← %s %s → %d (%s)", r.Method, r.URL.Path, recorder.StatusCode, duration)
-		if recorder.Body.Len() > 0 {
-			log.Printf("  Response: %s", formatJSON(recorder.Body.Bytes()))
-		}
 		log.Println()
 	})
 }
@@ -119,20 +105,10 @@ func StructuredLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Check if it's a static asset
-		isStatic := isStaticAsset(r.URL.Path)
-
-		// Read request body only for non-static requests
-		var requestBody []byte
-		if !isStatic && r.Body != nil {
-			requestBody, _ = io.ReadAll(r.Body)
-			r.Body = io.NopCloser(bytes.NewBuffer(requestBody))
-		}
-
 		recorder := NewResponseRecorder(w)
 		next.ServeHTTP(recorder, r)
 
-		// Create log entry
+		// Create log entry (metadata only, no bodies)
 		logEntry := map[string]interface{}{
 			"timestamp":      start.Format(time.RFC3339),
 			"method":         r.Method,
@@ -142,17 +118,6 @@ func StructuredLoggingMiddleware(next http.Handler) http.Handler {
 			"remote_addr":    r.RemoteAddr,
 			"user_agent":     r.UserAgent(),
 			"content_length": r.ContentLength,
-		}
-
-		// Only log bodies for non-static assets
-		if !isStatic {
-			if len(requestBody) > 0 {
-				logEntry["request_body"] = string(requestBody)
-			}
-
-			if recorder.Body.Len() > 0 {
-				logEntry["response_body"] = recorder.Body.String()
-			}
 		}
 
 		logJSON, _ := json.Marshal(logEntry)

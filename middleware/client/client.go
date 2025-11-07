@@ -45,7 +45,9 @@ func NewPayingClient(privateKeyHex string) (*PayingClient, error) {
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 
 	return &PayingClient{
-		client:     &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second, // Prevent indefinite hangs
+		},
 		signer:     privateKey,
 		signerAddr: address,
 	}, nil
@@ -152,10 +154,15 @@ func (c *PayingClient) generatePaymentPayload(requirements *types.PaymentRequire
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	// Set validity window (1 hour)
+	// Set validity window based on server's MaxTimeoutSeconds (default: 1 hour)
 	now := time.Now().Unix()
 	validAfter := uint64(now)
-	validBefore := uint64(now + 3600)
+
+	timeout := 3600 // Default: 1 hour
+	if requirements.MaxTimeoutSeconds > 0 {
+		timeout = requirements.MaxTimeoutSeconds
+	}
+	validBefore := uint64(now + int64(timeout))
 
 	// Parse receiver address
 	receiverAddr := requirements.PayTo

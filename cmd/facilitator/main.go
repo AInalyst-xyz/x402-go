@@ -75,8 +75,24 @@ func main() {
 	// Add request size limit middleware (1MB limit)
 	sizeLimitedHandler := requestSizeLimitMiddleware(loggedHandler, 1<<20) // 1MB
 
+	// Add rate limiting middleware
+	// Default: 100 requests/minute per IP, burst of 20
+	// Set RATE_LIMIT=0 to disable rate limiting
+	rateLimit := getEnvInt("RATE_LIMIT_PER_MINUTE", 100)
+	burstSize := getEnvInt("RATE_LIMIT_BURST", 20)
+
+	var rateLimitedHandler http.Handler
+	if rateLimit > 0 {
+		log.Printf("Rate limiting enabled: %d requests/minute (burst: %d)", rateLimit, burstSize)
+		rateLimiter := middleware.NewRateLimiter(rateLimit, burstSize)
+		rateLimitedHandler = middleware.RateLimitMiddleware(rateLimiter)(sizeLimitedHandler)
+	} else {
+		log.Println("Rate limiting disabled")
+		rateLimitedHandler = sizeLimitedHandler
+	}
+
 	// Add CORS middleware
-	corsHandler := corsMiddleware(sizeLimitedHandler)
+	corsHandler := corsMiddleware(rateLimitedHandler)
 
 	// Create server
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
@@ -112,6 +128,17 @@ func main() {
 	}
 
 	log.Println("Server exited")
+}
+
+// getEnvInt gets an integer environment variable with a default value
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		var result int
+		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return defaultValue
 }
 
 // requestSizeLimitMiddleware limits the maximum size of request bodies to prevent DoS attacks

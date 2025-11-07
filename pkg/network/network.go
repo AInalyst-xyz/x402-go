@@ -109,6 +109,8 @@ var (
 	}
 
 	// USDCDeployments maps networks to their USDC token deployments
+	// NOTE: Asset whitelist validation is enforced in pkg/chain/evm/provider.go Verify()
+	// Currently whitelisted: Base mainnet USDC only (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
 	USDCDeployments = map[types.Network]USDCDeployment{
 		types.NetworkBaseSepolia: {
 			Network:      types.NetworkBaseSepolia,
@@ -118,7 +120,7 @@ var (
 		},
 		types.NetworkBase: {
 			Network:      types.NetworkBase,
-			TokenAddress: common.HexToAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"),
+			TokenAddress: common.HexToAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), // WHITELISTED
 			TokenSymbol:  "USDC",
 			Decimals:     6,
 		},

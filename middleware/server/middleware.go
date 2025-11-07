@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/x402-rs/x402-go/pkg/types"
@@ -21,7 +22,9 @@ type X402Middleware struct {
 func NewX402Middleware(facilitatorURL string) *X402Middleware {
 	return &X402Middleware{
 		facilitatorURL: strings.TrimSuffix(facilitatorURL, "/"),
-		client:         &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second, // Prevent indefinite hangs
+		},
 	}
 }
 

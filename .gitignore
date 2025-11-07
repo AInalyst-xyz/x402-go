@@ -40,5 +40,7 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+.claude/
+
 # Build artifacts
 /cmd/facilitator/facilitator
